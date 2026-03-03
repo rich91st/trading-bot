@@ -1,0 +1,5 @@
+discord.py
+flask
+alpaca-trade-api
+nest-asyncio
+gunicorn
