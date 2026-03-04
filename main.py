@@ -15,8 +15,8 @@ nest_asyncio.apply()
 DISCORD_TOKEN = os.getenv('DISCORD_TOKEN')
 ALPACA_API_KEY = os.getenv('ALPACA_API_KEY')
 ALPACA_SECRET_KEY = os.getenv('ALPACA_SECRET_KEY')
-ALPACA_BASE_URL = os.getenv('ALPACA_BASE_URL', 'https://paper-api.alpaca.markets')  # default paper
-WEBHOOK_SECRET = os.getenv('WEBHOOK_SECRET')  # optional, for alert verification
+ALPACA_BASE_URL = os.getenv('ALPACA_BASE_URL', 'https://paper-api.alpaca.markets')
+WEBHOOK_SECRET = os.getenv('WEBHOOK_SECRET')
 TRADE_PERCENT = 0.3  # 30% of equity per trade
 
 # -------------------- SETUP LOGGING --------------------
@@ -86,7 +86,7 @@ app = Flask(__name__)
 @app.route('/webhook', methods=['POST'])
 def webhook():
     global trading_enabled
-    # Optional: verify secret if provided in URL
+    # Verify secret if provided
     if WEBHOOK_SECRET:
         secret = request.args.get('secret')
         if secret != WEBHOOK_SECRET:
@@ -104,11 +104,9 @@ def webhook():
     logger.info(f"Received webhook: {data}")
 
     # Extract information from TradingView alert
-    # Expected structure: {"action": "buy" or "sell", "ticker": "AAPL", ...}
-    # TradingView sends different fields depending on how the alert is configured.
-    # We'll try to parse common fields.
     action = data.get('action') or data.get('side') or data.get('order_action')
     symbol = data.get('ticker') or data.get('symbol')
+    
     if not action or not symbol:
         logger.error("Missing action or symbol in webhook payload")
         return jsonify({'error': 'Missing action or symbol'}), 400
@@ -121,12 +119,13 @@ def webhook():
             cash = float(account.cash)
             # Use 30% of equity, but cannot exceed available cash
             trade_value = equity * TRADE_PERCENT
-            trade_value = min(trade_value, cash)  # don't use more than available cash
+            trade_value = min(trade_value, cash)
 
-            # Get current price (last trade)
+            # Get current price
             last_trade = api.get_last_trade(symbol)
             price = last_trade.price
-            qty = int(trade_value // price)  # whole shares only (Alpaca supports fractional for some, but simpler with whole)
+            qty = int(trade_value // price)
+            
             if qty <= 0:
                 logger.info(f"Calculated quantity zero (equity=${equity:.2f}, cash=${cash:.2f}, price=${price:.2f})")
                 return jsonify({'status': 'skipped', 'reason': 'qty zero'}), 200
@@ -144,11 +143,10 @@ def webhook():
 
         elif action.lower() == 'sell':
             # Close entire position for the symbol
-            position = None
             try:
                 position = api.get_position(symbol)
-            except Exception as e:
-                logger.info(f"No position found for {symbol}: {e}")
+            except:
+                logger.info(f"No position found for {symbol}")
                 return jsonify({'status': 'skipped', 'reason': 'no position'}), 200
 
             qty = abs(float(position.qty))
